@@ -227,21 +227,44 @@ export function calculateMotorGeometry(
 
   // 11. Material-Dependent Copper Losses (Temperature & Frequency AC Resistance)
   const insulationClass = materialConfig?.insulation ?? 'class_f_155';
-  let copperTemperatureC = 115;
-  if (insulationClass === 'class_b_130') copperTemperatureC = 95;
-  if (insulationClass === 'class_h_180') copperTemperatureC = 140;
+  let defaultCopperTemperatureC = 115;
+  if (insulationClass === 'class_b_130') defaultCopperTemperatureC = 95;
+  if (insulationClass === 'class_h_180') defaultCopperTemperatureC = 140;
+
+  // Operating temperature can be simulated dynamically via customWindingTemperatureC
+  const copperTemperatureC =
+    materialConfig?.customWindingTemperatureC !== undefined
+      ? materialConfig.customWindingTemperatureC
+      : defaultCopperTemperatureC;
+
+  // Reference copper properties: rho20 = 0.017241 Ohm*mm²/m, alpha_cu = 0.00393 / °C (IEC 60034-1)
+  const rho20 = 0.017241;
+  const alphaCu = 0.00393;
 
   // Temperature-dependent copper resistivity: rho(T) = rho20 * (1 + alpha * (T - 20))
   const copperResistivityOhm_mm2_m = Number(
-    (0.017241 * (1 + 0.00393 * (copperTemperatureC - 20))).toFixed(5)
+    (rho20 * (1 + alphaCu * (copperTemperatureC - 20))).toFixed(5)
   );
 
   const endTurnLengthMm = 1.35 * tau_mm + 40;
   const halfTurnLengthMm = L_mm + endTurnLengthMm;
   const totalCoilLengthMm = 2 * halfTurnLengthMm * turnsPerPhase;
-  const statorResistancePerPhaseOhm =
-    (copperResistivityOhm_mm2_m * (totalCoilLengthMm * 1e-3)) /
-    Math.max(0.1, bareConductorAreaMm2);
+  const bareCuArea = Math.max(0.1, bareConductorAreaMm2);
+
+  // Cold reference resistance at 20°C and standard test reference at 75°C (IEEE 112)
+  const statorResistance20COhm = Number(
+    ((rho20 * (totalCoilLengthMm * 1e-3)) / bareCuArea).toFixed(4)
+  );
+  const statorResistance75COhm = Number(
+    ((rho20 * (1 + alphaCu * (75 - 20)) * (totalCoilLengthMm * 1e-3)) / bareCuArea).toFixed(4)
+  );
+
+  const statorResistancePerPhaseOhm = Number(
+    ((copperResistivityOhm_mm2_m * (totalCoilLengthMm * 1e-3)) / bareCuArea).toFixed(4)
+  );
+  const resistanceIncreasePercent = Number(
+    (((statorResistancePerPhaseOhm - statorResistance20COhm) / statorResistance20COhm) * 100).toFixed(1)
+  );
 
   // AC skin & proximity effect multiplier: kac(f)
   // kac increases with frequency squared and slot depth
@@ -409,6 +432,9 @@ export function calculateMotorGeometry(
     endTurnLengthMm: Number(endTurnLengthMm.toFixed(1)),
     totalCoilLengthMm: Number(totalCoilLengthMm.toFixed(0)),
     statorResistancePerPhaseOhm: Number(statorResistancePerPhaseOhm.toFixed(4)),
+    statorResistance20COhm,
+    statorResistance75COhm,
+    resistanceIncreasePercent,
     acResistanceFactorKac,
 
     // Topology Specifics

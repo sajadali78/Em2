@@ -17,13 +17,14 @@ import {
   Compass,
   Activity,
   Layers,
+  Gauge,
 } from 'lucide-react';
 
 interface HeaderProps {
   currentSpecs: MotorSpecs;
   onSelectPreset: (preset: MotorSpecs) => void;
-  activeTab: 'spreadsheet' | 'cad' | 'winding' | 'performance';
-  setActiveTab: (tab: 'spreadsheet' | 'cad' | 'winding' | 'performance') => void;
+  activeTab: 'spreadsheet' | 'cad' | 'winding' | 'performance' | 'system';
+  setActiveTab: (tab: 'spreadsheet' | 'cad' | 'winding' | 'performance' | 'system') => void;
   onExportPdf: () => void;
   onOpenGoogleSheetsModal: () => void;
   user: User | null;
@@ -111,6 +112,18 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Activity className="w-3.5 h-3.5" />
             <span>Torque & Losses</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('system')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap shrink-0 ${
+              activeTab === 'system'
+                ? 'bg-cyan-500 text-slate-950 shadow-sm font-semibold'
+                : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+            }`}
+          >
+            <Gauge className="w-3.5 h-3.5" />
+            <span>System Analysis</span>
           </button>
         </nav>
 

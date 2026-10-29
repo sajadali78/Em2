@@ -14,6 +14,7 @@ export interface MaterialLimitsConfig {
   cooling: CoolingMethod;
   insulation: InsulationClass;
   steelGrade: ElectricalSteelGrade;
+  customWindingTemperatureC?: number; // Optional simulated operating temperature [°C]
 }
 
 export interface MaterialValidationResult {
@@ -146,6 +147,9 @@ export interface CalculatedGeometry {
   endTurnLengthMm: number;       // Lend [mm]
   totalCoilLengthMm: number;     // Lcoil [mm]
   statorResistancePerPhaseOhm: number; // Rs [Ohm at T_oper]
+  statorResistance20COhm?: number;     // Rs [Ohm at 20°C cold reference]
+  statorResistance75COhm?: number;     // Rs [Ohm at 75°C test reference]
+  resistanceIncreasePercent?: number;  // Delta R / R20 [%]
   acResistanceFactorKac: number; // kac(f) skin/proximity factor
 
   // 6. Rotor Topology Specific Geometry

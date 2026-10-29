@@ -18,7 +18,17 @@ import {
   Sliders,
   ShieldCheck,
   AlertTriangle,
+  Waves,
+  Activity,
+  Info,
+  Gauge,
 } from 'lucide-react';
+import {
+  calculateAirgapFluxDensity,
+  AirgapFluxDensityResult,
+  FluxDensityPoint,
+  SpatialHarmonicPoint,
+} from '../utils/airgapFluxDensityAnalysis';
 
 interface MotorCadViewProps {
   specs: MotorSpecs;
@@ -65,6 +75,18 @@ export const MotorCadView: React.FC<MotorCadViewProps> = ({ specs, geom, materia
   const [showIsotherms, setShowIsotherms] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const [hoveredElement, setHoveredElement] = useState<string | null>(null);
+
+  // Air-gap flux density 2D line plot states
+  const [showFluxDensityPlot, setShowFluxDensityPlot] = useState<boolean>(false);
+  const [fluxSpanMode, setFluxSpanMode] = useState<'one_pole' | 'two_pole' | 'full_machine'>('two_pole');
+  const [showFundWave, setShowFundWave] = useState<boolean>(true);
+  const [showRotorEnvelope, setShowRotorEnvelope] = useState<boolean>(true);
+  const [showSlotNotches, setShowSlotNotches] = useState<boolean>(true);
+  const [hoveredFluxPoint, setHoveredFluxPoint] = useState<FluxDensityPoint | null>(null);
+  const [selectedSpatialHarmonic, setSelectedSpatialHarmonic] = useState<SpatialHarmonicPoint | null>(null);
+
+  // Compute 2D Air-Gap Flux Density distribution and spatial harmonics
+  const airgapFluxResult: AirgapFluxDensityResult = calculateAirgapFluxDensity(specs, geom);
 
   // Generate slot allocations for conductor coloring
   const slotAllocations = generateSlotAllocations(
@@ -224,6 +246,64 @@ export const MotorCadView: React.FC<MotorCadViewProps> = ({ specs, geom, materia
                 />
                 <span>Isotherms</span>
               </label>
+            </div>
+          )}
+
+          {/* Air-Gap Flux Density B(θ) 2D Plot Toggle */}
+          <button
+            onClick={() => setShowFluxDensityPlot(!showFluxDensityPlot)}
+            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all shadow-sm ${
+              showFluxDensityPlot
+                ? 'bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 text-white shadow-cyan-950/60 ring-1 ring-cyan-400'
+                : 'bg-slate-800 text-slate-300 hover:text-white border border-slate-700'
+            }`}
+            title="Toggle Air-Gap Flux Density B(θ) 2D Line Plot & Spatial Harmonics Verification"
+          >
+            <Waves
+              className={`w-3.5 h-3.5 ${
+                showFluxDensityPlot ? 'text-cyan-200 animate-pulse' : 'text-cyan-400'
+              }`}
+            />
+            Air-Gap Flux B(θ) {showFluxDensityPlot ? 'ON' : 'OFF'}
+          </button>
+
+          {/* Quick Span Selector Pills when Flux Plot is ON */}
+          {showFluxDensityPlot && (
+            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
+              <span className="text-[10px] text-slate-400 px-1">Span:</span>
+              <button
+                onClick={() => setFluxSpanMode('one_pole')}
+                className={`px-1.5 py-0.5 rounded text-[10px] ${
+                  fluxSpanMode === 'one_pole'
+                    ? 'bg-cyan-500 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="1 Pole Pitch (180° electrical)"
+              >
+                1 Pole
+              </button>
+              <button
+                onClick={() => setFluxSpanMode('two_pole')}
+                className={`px-1.5 py-0.5 rounded text-[10px] ${
+                  fluxSpanMode === 'two_pole'
+                    ? 'bg-cyan-500 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="2 Pole Pitches (360° electrical)"
+              >
+                2 Poles
+              </button>
+              <button
+                onClick={() => setFluxSpanMode('full_machine')}
+                className={`px-1.5 py-0.5 rounded text-[10px] ${
+                  fluxSpanMode === 'full_machine'
+                    ? 'bg-cyan-500 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Full 360° Mechanical Revolution"
+              >
+                360°
+              </button>
             </div>
           )}
 
@@ -523,17 +603,26 @@ export const MotorCadView: React.FC<MotorCadViewProps> = ({ specs, geom, materia
               className="cursor-pointer"
             />
 
-            {/* Mechanical Airgap Clearance */}
+            {/* Mechanical Airgap Clearance & Flux Integration Path */}
             <circle
               cx={cx}
               cy={cy}
               r={(rBore + rRotor) / 2}
               fill="none"
-              stroke={showThermalOverlay ? getThermalColor(airgapC, minThermalT, maxThermalT) : "#38bdf8"}
-              strokeWidth="1.0"
+              stroke={
+                showFluxDensityPlot
+                  ? "#22d3ee"
+                  : showThermalOverlay
+                  ? getThermalColor(airgapC, minThermalT, maxThermalT)
+                  : "#38bdf8"
+              }
+              strokeWidth={showFluxDensityPlot ? "2.2" : "1.0"}
+              strokeDasharray={showFluxDensityPlot ? "4 2" : undefined}
               onMouseEnter={() =>
                 setHoveredElement(
-                  showThermalOverlay
+                  showFluxDensityPlot
+                    ? `Airgap Flux Path: g = ${g_mm} mm | Bg,fund = ${airgapFluxResult.bgFundamentalTesla} T | Bmax = ${airgapFluxResult.bgPeakTesla} T | Carter Dip = ${airgapFluxResult.carterDipDepthPct}%`
+                    : showThermalOverlay
                     ? `Airgap Clearance: g = ${g_mm} mm | Airgap Fluid Temp = ${airgapC}°C | Effective ge = ${geom.effectiveAirgapMm} mm`
                     : `Airgap Clearance: g = ${g_mm} mm | Effective ge = ${geom.effectiveAirgapMm} mm`
                 )
@@ -999,6 +1088,74 @@ export const MotorCadView: React.FC<MotorCadViewProps> = ({ specs, geom, materia
                 </g>
               </g>
             )}
+
+            {/* Synchronized Air-Gap Flux Probe Ray & Angular Crosshair */}
+            {showFluxDensityPlot && hoveredFluxPoint && (
+              <g className="pointer-events-none select-none">
+                {(() => {
+                  const angRad = (hoveredFluxPoint.mechAngleDeg * Math.PI) / 180;
+                  const rAir = (rBore + rRotor) / 2;
+                  const rayLen = rOuter + 22;
+                  const x1 = cx;
+                  const y1 = cy;
+                  const x2 = cx + rayLen * Math.cos(angRad);
+                  const y2 = cy + rayLen * Math.sin(angRad);
+                  const ptX = cx + rAir * Math.cos(angRad);
+                  const ptY = cy + rAir * Math.sin(angRad);
+
+                  return (
+                    <g>
+                      {/* Radial Guide Line from Origin through Airgap */}
+                      <line
+                        x1={x1}
+                        y1={y1}
+                        x2={x2}
+                        y2={y2}
+                        stroke="#22d3ee"
+                        strokeWidth="1.5"
+                        strokeDasharray="4 3"
+                        strokeOpacity="0.85"
+                      />
+                      {/* Active Airgap Point Marker */}
+                      <circle
+                        cx={ptX}
+                        cy={ptY}
+                        r="5"
+                        fill="#22d3ee"
+                        stroke="#020617"
+                        strokeWidth="2"
+                      />
+                      {/* Floating Angle & Flux Density Badge */}
+                      <g
+                        transform={`translate(${
+                          ptX + (Math.cos(angRad) >= 0 ? 10 : -132)
+                        }, ${ptY + (Math.sin(angRad) >= 0 ? 12 : -16)})`}
+                      >
+                        <rect
+                          width="122"
+                          height="20"
+                          rx="4"
+                          fill="#090d16"
+                          stroke="#22d3ee"
+                          strokeWidth="1"
+                          opacity="0.95"
+                        />
+                        <text
+                          x="6"
+                          y="13.5"
+                          fill="#38bdf8"
+                          fontSize="9"
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                        >
+                          B = {hoveredFluxPoint.totalFluxDensityTesla} T ({hoveredFluxPoint.mechAngleDeg}°m)
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })()}
+              </g>
+            )}
           </svg>
         ) : (
           /* Axial Longitudinal Core Section (XZ Plane) with True Aspect Ratio L/D */
@@ -1275,7 +1432,9 @@ export const MotorCadView: React.FC<MotorCadViewProps> = ({ specs, geom, materia
             <Crosshair className={`w-4 h-4 shrink-0 ${showThermalOverlay ? 'text-amber-400' : 'text-cyan-400'}`} />
             <span className="font-mono text-slate-200">
               {hoveredElement ??
-                (showThermalOverlay
+                (showFluxDensityPlot
+                  ? '⚡ Air-Gap Flux Verification: Inspecting radial flux distribution B(θ) with Carter slot permeance dips'
+                  : showThermalOverlay
                   ? '🔥 Thermal FEA Probe: Hover over winding slots, teeth, yoke, airgap, or rotor to probe localized temperatures'
                   : 'Hover over stator teeth, slots, airgap, or rotor to inspect true millimetric geometry')}
             </span>
@@ -1290,6 +1449,681 @@ export const MotorCadView: React.FC<MotorCadViewProps> = ({ specs, geom, materia
           </div>
         </div>
       </div>
+
+      {/* EXTENDED: 2D Air-Gap Flux Density Line Plot & Spatial Harmonics Verification Panel */}
+      {showFluxDensityPlot && (
+        <div className="border-t border-slate-800 bg-slate-950 p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Waves className="w-4 h-4 text-cyan-400" />
+                Air-Gap Flux Density Distribution B(θ) & Spatial Field Harmonics
+              </h3>
+              <p className="text-xs text-slate-400">
+                2D radial line plot of the air-gap magnetic flux density around the stator bore, visualizing the fundamental working wave B₁(θ), stator tooth peaks, slot opening permeance dips (Carter effect), and spatial harmonic spectrum.
+              </p>
+            </div>
+
+            {/* Span Mode Selector */}
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs font-mono">
+              <span className="text-[11px] text-slate-400 px-1 font-sans">Plot Span:</span>
+              <button
+                onClick={() => setFluxSpanMode('one_pole')}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  fluxSpanMode === 'one_pole'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="1 Pole Pitch: High-resolution view of tooth/slot permeance ripples"
+              >
+                1 Pole Pitch (180°e)
+              </button>
+              <button
+                onClick={() => setFluxSpanMode('two_pole')}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  fluxSpanMode === 'two_pole'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="2 Pole Pitches: Complete positive and negative electrical cycle"
+              >
+                2 Pole Pitches (360°e)
+              </button>
+              <button
+                onClick={() => setFluxSpanMode('full_machine')}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  fluxSpanMode === 'full_machine'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Full Machine: Complete 360° mechanical periphery"
+              >
+                Full Machine (360°m)
+              </button>
+            </div>
+          </div>
+
+          {/* 5-Metric Quick Engineering KPI Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 font-mono text-xs">
+            {/* Fundamental Peak Bg,1 */}
+            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-sans">
+                Fundamental Peak (Bg,1)
+              </span>
+              <div className="text-lg font-bold text-white">
+                {airgapFluxResult.bgFundamentalTesla}{' '}
+                <span className="text-xs font-normal text-slate-400">T</span>
+              </div>
+              <span className="text-[10px] text-emerald-400 block font-sans">
+                Nominal air-gap magnetic loading
+              </span>
+            </div>
+
+            {/* Maximum Peak Bmax */}
+            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-sans">
+                Peak Flux Density (Bmax)
+              </span>
+              <div className="text-lg font-bold text-cyan-300">
+                {airgapFluxResult.bgPeakTesla}{' '}
+                <span className="text-xs font-normal text-slate-400">T</span>
+              </div>
+              <span className="text-[10px] text-slate-400 block font-sans">
+                Tooth tip flux concentration
+              </span>
+            </div>
+
+            {/* Carter Slot Permeance Dip */}
+            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-sans">
+                Carter Slot Dip (ΔB)
+              </span>
+              <div className="text-lg font-bold text-amber-400">
+                {airgapFluxResult.carterDipDepthPct}%
+              </div>
+              <span className="text-[10px] text-slate-400 block font-sans">
+                bs0/g = {airgapFluxResult.slotOpeningRatio} (kc = {airgapFluxResult.carterCoefficient})
+              </span>
+            </div>
+
+            {/* Spatial Flux THD */}
+            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-sans">
+                Spatial Field THD
+              </span>
+              <div className="text-lg font-bold text-purple-400">
+                {airgapFluxResult.thdPct}%
+              </div>
+              <span className="text-[10px] text-slate-400 block font-sans">
+                MMF space & slot harmonics
+              </span>
+            </div>
+
+            {/* Form Factor alpha_i */}
+            <div className="bg-slate-900/80 p-3 rounded-lg border border-slate-800 space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-sans">
+                Field Form Factor (αi)
+              </span>
+              <div className="text-lg font-bold text-sky-400">
+                {airgapFluxResult.poleArcFactorAlpha}
+              </div>
+              <span className="text-[10px] text-slate-400 block font-sans">
+                Bavg / Bmax (Sawhney / Pyrhönen)
+              </span>
+            </div>
+          </div>
+
+          {/* Interactive 2D Line Plot Canvas & Filter Toggles */}
+          <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-white flex items-center gap-1.5 font-mono">
+                  <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                  Air-Gap Radial Flux Waveform B(θ)
+                </span>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {fluxSpanMode === 'one_pole'
+                    ? `[1 Pole Pitch: 0° to ${(360 / specs.poles).toFixed(1)}° mech (180° elec)]`
+                    : fluxSpanMode === 'two_pole'
+                    ? `[2 Pole Pitches: 0° to ${(720 / specs.poles).toFixed(1)}° mech (360° elec)]`
+                    : '[Full Machine: 0° to 360° mechanical revolution]'}
+                </span>
+              </div>
+
+              {/* Layer Filter Checkboxes */}
+              <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
+                <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white select-none">
+                  <span className="w-3 h-0.5 bg-cyan-400 inline-block shadow-sm shadow-cyan-400" />
+                  <span>Total B(θ) with Slotting</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white select-none">
+                  <input
+                    type="checkbox"
+                    checked={showFundWave}
+                    onChange={(e) => setShowFundWave(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-0 focus:ring-offset-0"
+                  />
+                  <span className="w-3 h-0.5 bg-emerald-400 border-t border-dashed border-emerald-400 inline-block" />
+                  <span>Fundamental B₁(θ)</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white select-none">
+                  <input
+                    type="checkbox"
+                    checked={showRotorEnvelope}
+                    onChange={(e) => setShowRotorEnvelope(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0"
+                  />
+                  <span className="w-3 h-0.5 bg-amber-400 border-t border-dashed border-amber-400 inline-block" />
+                  <span>Rotor MMF Envelope</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white select-none">
+                  <input
+                    type="checkbox"
+                    checked={showSlotNotches}
+                    onChange={(e) => setShowSlotNotches(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0"
+                  />
+                  <span className="w-2 h-2 rounded-sm bg-amber-400/30 inline-block" />
+                  <span>Slot Openings (bs0)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* SVG 2D Line Plot Canvas */}
+            {(() => {
+              const svgW = 760;
+              const svgH = 240;
+              const padL = 55;
+              const padR = 30;
+              const padT = 25;
+              const padB = 40;
+              const iW = svgW - padL - padR;
+              const iH = svgH - padT - padB;
+
+              // Select dataset
+              const dataset =
+                fluxSpanMode === 'one_pole'
+                  ? airgapFluxResult.poleWaveformPoints
+                  : fluxSpanMode === 'two_pole'
+                  ? airgapFluxResult.twoPoleWaveformPoints
+                  : airgapFluxResult.fullWaveformPoints;
+
+              const pPoles = Math.max(1, specs.poles / 2);
+              const maxAngle =
+                fluxSpanMode === 'one_pole'
+                  ? 360 / specs.poles
+                  : fluxSpanMode === 'two_pole'
+                  ? 720 / specs.poles
+                  : 360;
+
+              // Vertical scale: symmetric around 0 T
+              const bLimit = Math.max(0.4, Number((airgapFluxResult.bgPeakTesla * 1.25).toFixed(2)));
+              const yMin = -bLimit;
+              const yMax = bLimit;
+              const yRange = yMax - yMin;
+
+              const scaleX = (angle: number) => padL + (angle / maxAngle) * iW;
+              const scaleY = (bVal: number) => padT + iH - ((bVal - yMin) / yRange) * iH;
+
+              // SVG Paths
+              const d_total = dataset
+                .map(
+                  (pt, idx) =>
+                    `${idx === 0 ? 'M' : 'L'} ${scaleX(pt.mechAngleDeg).toFixed(1)} ${scaleY(
+                      pt.totalFluxDensityTesla
+                    ).toFixed(1)}`
+                )
+                .join(' ');
+
+              const d_fund = dataset
+                .map(
+                  (pt, idx) =>
+                    `${idx === 0 ? 'M' : 'L'} ${scaleX(pt.mechAngleDeg).toFixed(1)} ${scaleY(
+                      pt.fundamentalTesla
+                    ).toFixed(1)}`
+                )
+                .join(' ');
+
+              const d_rotor = dataset
+                .map(
+                  (pt, idx) =>
+                    `${idx === 0 ? 'M' : 'L'} ${scaleX(pt.mechAngleDeg).toFixed(1)} ${scaleY(
+                      pt.rotorEnvelopeTesla
+                    ).toFixed(1)}`
+                )
+                .join(' ');
+
+              // Area fill relative to 0 T axis
+              const yZero = scaleY(0);
+
+              // X-Ticks: 6 divisions across the span
+              const numTicks = 6;
+              const xTicks = Array.from({ length: numTicks + 1 }, (_, i) => (i / numTicks) * maxAngle);
+
+              // Stator slot openings within this angle span
+              const Qs = specs.statorSlots;
+              const slotPitchDeg = 360 / Qs;
+              const halfOpeningDeg = (geom.slotOpeningWidthMm / (Math.PI * geom.statorBoreDiameterMm)) * 180;
+              const visibleSlots: { slotNum: number; centerDeg: number }[] = [];
+              for (let k = 0; k <= Qs; k++) {
+                const deg = k * slotPitchDeg;
+                if (deg <= maxAngle + 0.1) {
+                  visibleSlots.push({ slotNum: (k % Qs) + 1, centerDeg: deg });
+                }
+              }
+
+              const handlePlotMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const normalizedX = (mouseX / rect.width) * svgW;
+                if (normalizedX >= padL && normalizedX <= padL + iW) {
+                  const angle = Math.max(0, Math.min(maxAngle, ((normalizedX - padL) / iW) * maxAngle));
+                  const closest = dataset.reduce((prev, curr) =>
+                    Math.abs(curr.mechAngleDeg - angle) < Math.abs(prev.mechAngleDeg - angle)
+                      ? curr
+                      : prev
+                  );
+                  setHoveredFluxPoint(closest);
+                }
+              };
+
+              return (
+                <div className="relative">
+                  <svg
+                    viewBox={`0 0 ${svgW} ${svgH}`}
+                    className="w-full h-60 select-none cursor-crosshair overflow-visible"
+                    onMouseMove={handlePlotMouseMove}
+                    onMouseLeave={() => setHoveredFluxPoint(null)}
+                  >
+                    <defs>
+                      <linearGradient id="fluxFillGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#0891b2" stopOpacity="0.02" />
+                      </linearGradient>
+
+                      <filter id="glowFlux" x="-10%" y="-10%" width="120%" height="120%">
+                        <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="#22d3ee" floodOpacity="0.5" />
+                      </filter>
+                    </defs>
+
+                    {/* Stator Slot Opening Shaded Regions (bs0) */}
+                    {showSlotNotches &&
+                      visibleSlots.map((s, idx) => {
+                        const x1 = Math.max(padL, scaleX(s.centerDeg - halfOpeningDeg));
+                        const x2 = Math.min(padL + iW, scaleX(s.centerDeg + halfOpeningDeg));
+                        const w = Math.max(1.5, x2 - x1);
+                        return (
+                          <g key={idx}>
+                            <rect
+                              x={x1}
+                              y={padT}
+                              width={w}
+                              height={iH}
+                              fill="#f59e0b"
+                              fillOpacity="0.08"
+                              stroke="#f59e0b"
+                              strokeOpacity="0.25"
+                              strokeDasharray="2 2"
+                            />
+                            {/* Slot index label if zoomed in */}
+                            {fluxSpanMode !== 'full_machine' && (
+                              <text
+                                x={scaleX(s.centerDeg)}
+                                y={padT - 6}
+                                fill="#d97706"
+                                fontSize="7.5"
+                                fontFamily="monospace"
+                                textAnchor="middle"
+                              >
+                                Slot #{s.slotNum}
+                              </text>
+                            )}
+                          </g>
+                        );
+                      })}
+
+                    {/* Horizontal Y-Gridlines & Labels */}
+                    {[-bLimit, -bLimit / 2, 0, bLimit / 2, bLimit].map((yVal, idx) => {
+                      const yPos = scaleY(yVal);
+                      const isZero = Math.abs(yVal) < 0.001;
+                      return (
+                        <g key={idx}>
+                          <line
+                            x1={padL}
+                            y1={yPos}
+                            x2={padL + iW}
+                            y2={yPos}
+                            stroke={isZero ? '#475569' : '#1e293b'}
+                            strokeWidth={isZero ? 1.2 : 1}
+                            strokeDasharray={isZero ? '4 3' : '2 3'}
+                          />
+                          <text
+                            x={padL - 8}
+                            y={yPos + 3.5}
+                            fill={isZero ? '#94a3b8' : '#64748b'}
+                            fontSize="9"
+                            fontFamily="monospace"
+                            textAnchor="end"
+                          >
+                            {yVal.toFixed(2)}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Vertical X-Gridlines & Dual Angle Labels (Mech & Elec) */}
+                    {xTicks.map((deg, idx) => {
+                      const xPos = scaleX(deg);
+                      const elecDeg = (deg * pPoles).toFixed(0);
+                      return (
+                        <g key={idx}>
+                          <line
+                            x1={xPos}
+                            y1={padT}
+                            x2={xPos}
+                            y2={padT + iH}
+                            stroke="#1e293b"
+                            strokeDasharray="2 3"
+                          />
+                          {/* Mechanical Degrees */}
+                          <text
+                            x={xPos}
+                            y={padT + iH + 15}
+                            fill="#94a3b8"
+                            fontSize="9"
+                            fontFamily="monospace"
+                            textAnchor="middle"
+                          >
+                            {deg.toFixed(1)}°m
+                          </text>
+                          {/* Electrical Degrees */}
+                          <text
+                            x={xPos}
+                            y={padT + iH + 27}
+                            fill="#64748b"
+                            fontSize="8"
+                            fontFamily="monospace"
+                            textAnchor="middle"
+                          >
+                            {elecDeg}°e
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Axis Labels */}
+                    <text
+                      x={-padT - iH / 2}
+                      y="16"
+                      transform="rotate(-90)"
+                      fill="#94a3b8"
+                      fontSize="9.5"
+                      fontFamily="monospace"
+                      textAnchor="middle"
+                    >
+                      Flux Density B [Tesla]
+                    </text>
+
+                    <text
+                      x={padL + iW / 2}
+                      y={padT + iH + 38}
+                      fill="#94a3b8"
+                      fontSize="9"
+                      fontFamily="monospace"
+                      textAnchor="middle"
+                    >
+                      Air-Gap Circumferential Angle θ [Mechanical Degrees °m / Electrical Degrees °e]
+                    </text>
+
+                    {/* Unslotted Rotor Envelope Waveform */}
+                    {showRotorEnvelope && (
+                      <path
+                        d={d_rotor}
+                        fill="none"
+                        stroke="#f59e0b"
+                        strokeWidth="1.3"
+                        strokeDasharray="3 2"
+                        strokeOpacity="0.8"
+                      />
+                    )}
+
+                    {/* Fundamental Sinusoidal Waveform B1 */}
+                    {showFundWave && (
+                      <path
+                        d={d_fund}
+                        fill="none"
+                        stroke="#10b981"
+                        strokeWidth="1.5"
+                        strokeDasharray="4 4"
+                        strokeOpacity="0.9"
+                      />
+                    )}
+
+                    {/* Total Air-gap Flux Density Waveform B(theta) */}
+                    <path
+                      d={d_total}
+                      fill="none"
+                      stroke="#22d3ee"
+                      strokeWidth="2.4"
+                      strokeLinejoin="round"
+                      filter="url(#glowFlux)"
+                    />
+
+                    {/* Hover Crosshair & Probe Dot */}
+                    {hoveredFluxPoint && (
+                      <g>
+                        {/* Vertical line indicator */}
+                        <line
+                          x1={scaleX(hoveredFluxPoint.mechAngleDeg)}
+                          y1={padT}
+                          x2={scaleX(hoveredFluxPoint.mechAngleDeg)}
+                          y2={padT + iH}
+                          stroke="#e2e8f0"
+                          strokeWidth="1.2"
+                          strokeDasharray="3 3"
+                          strokeOpacity="0.75"
+                        />
+
+                        {/* Total B marker dot */}
+                        <circle
+                          cx={scaleX(hoveredFluxPoint.mechAngleDeg)}
+                          cy={scaleY(hoveredFluxPoint.totalFluxDensityTesla)}
+                          r="5"
+                          fill="#22d3ee"
+                          stroke="#020617"
+                          strokeWidth="2"
+                        />
+
+                        {/* Fundamental B1 marker dot */}
+                        {showFundWave && (
+                          <circle
+                            cx={scaleX(hoveredFluxPoint.mechAngleDeg)}
+                            cy={scaleY(hoveredFluxPoint.fundamentalTesla)}
+                            r="3"
+                            fill="#10b981"
+                            stroke="#020617"
+                            strokeWidth="1"
+                          />
+                        )}
+                      </g>
+                    )}
+                  </svg>
+
+                  {/* Floating Crosshair Hover Callout */}
+                  {hoveredFluxPoint && (
+                    <div
+                      className="absolute pointer-events-none bg-slate-900/95 border border-cyan-500/60 shadow-2xl rounded-lg p-2.5 text-[11px] font-mono text-slate-200 z-30 transition-all backdrop-blur-sm"
+                      style={{
+                        left: `${Math.min(
+                          75,
+                          Math.max(8, (hoveredFluxPoint.mechAngleDeg / maxAngle) * 100)
+                        )}%`,
+                        top: '10px',
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-3 font-bold text-white border-b border-slate-800 pb-1 mb-1">
+                        <span className="text-cyan-400">
+                          θ = {hoveredFluxPoint.mechAngleDeg}°m ({hoveredFluxPoint.elecAngleDeg}°e)
+                        </span>
+                        <span className="text-emerald-400">
+                          B = {hoveredFluxPoint.totalFluxDensityTesla} T
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 text-slate-300 text-[10px]">
+                        <div className="flex justify-between gap-4">
+                          <span className="text-emerald-400">Fundamental B₁:</span>
+                          <span>{hoveredFluxPoint.fundamentalTesla} T</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-amber-400">Rotor Envelope:</span>
+                          <span>{hoveredFluxPoint.rotorEnvelopeTesla} T</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-slate-400">Permeance Ratio λ:</span>
+                          <span>{hoveredFluxPoint.permeanceRatio}x</span>
+                        </div>
+                        <div className="flex justify-between gap-4 pt-0.5 border-t border-slate-800/80">
+                          <span className="text-slate-400">Stator Position:</span>
+                          <span
+                            className={
+                              hoveredFluxPoint.isOverSlotOpening
+                                ? 'text-amber-400 font-bold'
+                                : 'text-slate-200'
+                            }
+                          >
+                            {hoveredFluxPoint.isOverSlotOpening
+                              ? `Slot #${hoveredFluxPoint.nearestSlotIndex} Opening (Permeance Dip)`
+                              : `Tooth #${hoveredFluxPoint.nearestSlotIndex} Iron Peak`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Visual Color Legend Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80 text-xs">
+              <div className="flex flex-wrap items-center gap-4 text-[11px] font-mono">
+                <span className="flex items-center gap-1.5 text-slate-300">
+                  <span className="w-3 h-0.5 bg-cyan-400 inline-block shadow-sm shadow-cyan-400" />
+                  <span>Total Resulting B(θ) with Slot Permeance</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-300">
+                  <span className="w-3 h-0.5 bg-emerald-400 border-t border-dashed border-emerald-400 inline-block" />
+                  <span>Fundamental Working Wave B₁(θ)</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-300">
+                  <span className="w-3 h-0.5 bg-amber-400 border-t border-dashed border-amber-400 inline-block" />
+                  <span>Rotor MMF / Magnet Shape</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-300">
+                  <span className="w-2.5 h-2.5 bg-amber-500/20 border border-amber-500/50 inline-block rounded-sm" />
+                  <span>Stator Slot Opening bs0 ({geom.slotOpeningWidthMm} mm)</span>
+                </span>
+              </div>
+
+              <span className="text-[10px] text-cyan-400 font-mono">
+                Probe ray live-synced with CAD cross-section above
+              </span>
+            </div>
+          </div>
+
+          {/* Spatial Field Harmonics Decomposition & Verification Matrix */}
+          <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Gauge className="w-3.5 h-3.5 text-cyan-400" />
+                Spatial Field Harmonics Verification Matrix (Air-gap Field Spectrum)
+              </span>
+              <span className="text-[11px] font-mono text-slate-400">
+                Spatial THD = {airgapFluxResult.thdPct}% | Fundamental Bg,1 = {airgapFluxResult.bgFundamentalTesla} T
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+              {airgapFluxResult.spatialHarmonics.map((sh) => {
+                const isSelected = selectedSpatialHarmonic?.name === sh.name;
+                return (
+                  <div
+                    key={sh.name}
+                    onClick={() => setSelectedSpatialHarmonic(isSelected ? null : sh)}
+                    className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                      isSelected
+                        ? 'bg-cyan-950/40 border-cyan-500 ring-1 ring-cyan-500/50'
+                        : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[11px] font-bold text-white font-mono">
+                      <span>ν = {sh.orderElec}</span>
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          sh.isSlotHarmonic
+                            ? 'bg-amber-400'
+                            : sh.orderElec === 1
+                            ? 'bg-emerald-400'
+                            : 'bg-cyan-400'
+                        }`}
+                      />
+                    </div>
+
+                    <div className="mt-1 font-mono">
+                      <div className="text-sm font-bold text-cyan-300">
+                        {sh.amplitudeTesla} <span className="text-[9px] text-slate-500 font-normal">T</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-sans">
+                        {sh.relativePct}% <span className="text-slate-500 text-[9px]">B₁</span>
+                      </div>
+                    </div>
+
+                    <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden mt-1.5 border border-slate-800">
+                      <div
+                        className={`h-full rounded-full ${
+                          sh.isSlotHarmonic
+                            ? 'bg-amber-400'
+                            : sh.orderElec === 1
+                            ? 'bg-emerald-400'
+                            : 'bg-cyan-400'
+                        }`}
+                        style={{ width: `${Math.min(100, Math.max(3, sh.relativePct))}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Selected Harmonic Physical Engineering Drawer */}
+            {selectedSpatialHarmonic && (
+              <div className="p-3 bg-slate-950 rounded-lg border border-cyan-500/40 text-xs space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-cyan-300 font-mono flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5" />
+                    {selectedSpatialHarmonic.name} Physical Origin & Impact:
+                  </span>
+                  <span className="font-mono text-slate-300 text-[11px]">
+                    Amplitude = {selectedSpatialHarmonic.amplitudeTesla} T ({selectedSpatialHarmonic.relativePct}% of B₁)
+                  </span>
+                </div>
+                <p className="text-slate-300 font-sans leading-relaxed text-[11px]">
+                  {selectedSpatialHarmonic.origin}.{' '}
+                  {selectedSpatialHarmonic.isSlotHarmonic
+                    ? 'Slot ripple harmonics produce acoustic rotor noise (NVH) and high-frequency EMI. Mitigation: Applying 1.0 slot pitch stator helical skewing attenuates this component by >25 dB.'
+                    : selectedSpatialHarmonic.orderElec === 5 || selectedSpatialHarmonic.orderElec === 7
+                    ? 'The 5th and 7th space harmonics create 6th electrical torque ripple and rotor eddy-current losses. Mitigation: Chording stator coils with 5/6 coil pitch substantially eliminates these harmonics.'
+                    : selectedSpatialHarmonic.orderElec === 3
+                    ? 'The 3rd spatial harmonic stems from rotor pole-arc flatness. Mitigation: Shaping rotor pole shoe contours or optimizing magnet pole arc ratio (alpha_p ~ 0.74) eliminates triplen harmonics.'
+                    : 'Fundamental electromagnetic working wave driving synchronous torque production.'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

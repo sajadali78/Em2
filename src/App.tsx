@@ -13,6 +13,7 @@ import { GeometrySpreadsheet } from './components/GeometrySpreadsheet';
 import { MotorCadView } from './components/MotorCadView';
 import { WindingAnalysisView } from './components/WindingAnalysisView';
 import { PerformanceDashboard } from './components/PerformanceDashboard';
+import { SystemAnalysisView } from './components/SystemAnalysisView';
 import { GoogleSheetsModal } from './components/GoogleSheetsModal';
 import { FloatingEngineeringHud } from './components/FloatingEngineeringHud';
 import { generateMotorDesignPdf } from './utils/pdfExport';
@@ -33,7 +34,7 @@ import {
 
 export default function App() {
   const [currentSpecs, setCurrentSpecs] = useState<MotorSpecs>(MOTOR_PRESETS[0]);
-  const [activeTab, setActiveTab] = useState<'spreadsheet' | 'cad' | 'winding' | 'performance'>('spreadsheet');
+  const [activeTab, setActiveTab] = useState<'spreadsheet' | 'cad' | 'winding' | 'performance' | 'system'>('spreadsheet');
 
   // Material Limits Configuration state
   const [materialConfig, setMaterialConfig] = useState<MaterialLimitsConfig>({
@@ -304,7 +305,7 @@ export default function App() {
         )}
 
         {activeTab === 'cad' && (
-          <div className="h-[740px]">
+          <div className="min-h-[740px] flex flex-col">
             <MotorCadView
               specs={currentSpecs}
               geom={calculatedGeometry}
@@ -328,6 +329,15 @@ export default function App() {
             onApplyOptimizedSpecs={(opt) => setCurrentSpecs(opt)}
             materialConfig={materialConfig}
             onChangeMaterialConfig={setMaterialConfig}
+          />
+        )}
+
+        {activeTab === 'system' && (
+          <SystemAnalysisView
+            specs={currentSpecs}
+            geom={calculatedGeometry}
+            materialConfig={materialConfig}
+            onExportPdf={handleExportPdf}
           />
         )}
       </main>
